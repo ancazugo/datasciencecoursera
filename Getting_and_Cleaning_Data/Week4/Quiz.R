@@ -32,7 +32,7 @@ df <- merge(gdp, education, by = 'CountryCode', all = T)
 
 #Find 'Fiscal year end: June' on Special Notes column and show rows
 fiscalJune <- grep('Fiscal year end: June', df$Special.Notes)
-df[fiscalJune ,]
+df[fiscalJune,]
 
 #Load Amazon stock values and dates
 amzn <- getSymbols('AMZN', auto.assign = F)
