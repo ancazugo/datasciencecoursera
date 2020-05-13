@@ -52,3 +52,4 @@ names(df2) <- gsub('\\-', '_', names(df2))
 tidy_df <- df2 %>%
     group_by(Subject, Activity) %>%
     summarise_all(., .funs = mean)
+write.table(tidy_df, 'tidy_data.txt', row.names = F)
