@@ -37,7 +37,7 @@ selectedColumns <- c(1, 2, grep('mean|std', names(df)))
 df2 <- df[, ..selectedColumns]
 
 #Change column names to a proper form
-names(df2) <- gsub('^t', 'Temperature', names(df2))
+names(df2) <- gsub('^t', 'Time', names(df2))
 names(df2) <- gsub('(^f|Freq)', 'Frequency', names(df2))
 names(df2) <- gsub('BodyBody', 'Body', names(df2))
 names(df2) <- gsub('Acc', 'Accelerometer', names(df2))
