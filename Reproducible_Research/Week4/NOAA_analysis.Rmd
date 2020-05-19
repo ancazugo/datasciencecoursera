@@ -1,0 +1,66 @@
+---
+title: "NOAA Data Analysis"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "18/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
+```
+
+First, we load the necessary packages
+```{r message=FALSE}
+library(data.table) #Reading data
+library(dplyr) #handling data
+library(plyr) #Mapping values in dataFrames
+library(ggplot2) #Plotting system
+library(cowplot) #ggplot2 plot grids
+```
+
+
+# Data Processing  
+As a first step in the overall analysis, the data must be downloaded. Unzipping is not necessary if you have installed the `R.utils` package. Make sure it is installed.
+```{r eval=FALSE}
+setwd('./Reproducible_Research/Week4')
+download.file('https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2', destfile = 'stormData.csv.bz2')
+```
+
+Next, the zip file is loaded in R using the `fread()` from the data.table package. Notice how STATE and EVTYPE variables are imported as factors. The value sof both PROPDMGEXP and CROPDMGEXP are changed to numeric. Some of them were in upper and lowercase so I changed them lo lowercase to simplify the mapping of values. Then I created two new columns were the value in PROPDMG an CROPDMG were multiplied by the new value of PROPDMGEXP and CROPDMGEXP, respectively.  
+```{r storm}
+storm <- fread('stormData.csv.bz2', na.strings = c('NA'), select = c('EVTYPE', 'FATALITIES', 'INJURIES', 'PROPDMG', 'PROPDMGEXP', "CROPDMG", "CROPDMGEXP"), colClasses = list(factor = c('EVTYPE')))
+
+storm$PROPDMGEXP <- as.numeric(mapvalues(tolower(storm$PROPDMGEXP), from = c('', '?', '+', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', 'h', 'k', 'm', 'b'), to = c(1, 0, 1, 1, 1, 0, 10^2, 10^3, 10^4, 10^5, 10^6, 10^7, 10^8, 10^2, 10^3, 10^6, 10^9)))
+storm$TotalPropertyDamage <- storm$PROPDMG * storm$PROPDMGEXP
+
+storm$CROPDMGEXP <- as.numeric(mapvalues(tolower(storm$CROPDMGEXP), from = c('', '?', '0', '2', 'k', 'm', 'b'), to = c(1, 0, 1, 10^2, 10^3, 10^6, 10^9)))
+storm$TotalCropDamage <- storm$CROPDMG * storm$CROPDMGEXP
+```
+The mapped values are:  
+
+- $?, 1 = 0$
+- $'', +, -, 0 = 10^{0} = 1$
+- $2, 3, 4, 5, 6, 7, 8 = 10^{n}$, where $n$ corresponds to each number
+- $h, k, m, b = 10^{2}, 10^{3}, 10^{6}, 10^{9}$, according to each prefix: **h**ecto, **k**ilo, **m**ega and **b**illion  
+
+For the analysis of deadliest and costliest types of events, the data must be grouped according to EVTYPE, as shown below:
+```{r event_type}
+byEventType <- storm %>%
+    group_by(EVTYPE) %>%
+    dplyr::summarise(TotalEvents = n(), #Number of Events
+              TotalFatalities = sum(FATALITIES), #Total number of fatalities
+              AvgFatalities = round(mean(FATALITIES, na.rm = T), 2), #Mean number of fatalities
+              TotalInjuries = sum(INJURIES), #Total number of injuries
+              AvgInjuries = round(mean(INJURIES, na.rm = T), 2), #Mean number of injuries
+              TotalPropertyDamage = sum(TotalPropertyDamage), #Total property damage cost
+              AvgPropertyDamage = round(mean(TotalPropertyDamage, na.rm = T), 2), #Mean property damage cost
+              TotalCropDamage = sum(TotalCropDamage), #Total property damage cost
+              AvgCropDamage = round(mean(TotalCropDamage, na.rm = T), 2)) #Mean crop damage cost
+```
+
+After summarising the data, I decided to filter the events by those that have ocurred at least 6 times, since some of the types are very specific, such as TORNADOES, TSTM WIND, HAIL. So removed them and that shortened the table from `r nrow(byEventType)` rows to 225 records.
+```{r}
+commonEvents <- byEventType[byEventType$TotalEvents > 5, ]
+```
+
+# Results
