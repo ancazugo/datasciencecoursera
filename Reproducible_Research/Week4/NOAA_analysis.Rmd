@@ -1,7 +1,7 @@
 ---
-title: "NOAA Data Analysis"
+title: "Weather-related Disasters in Numbers: A Case Study in The US"
 author: "Andres Camilo Zuñiga Gonzalez"
-date: "18/5/2020"
+date: "19/5/2020"
 output: html_document
 ---
 
@@ -9,13 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
 ```
 
+Weather events are a threat that humankind has had to face from the beginning; however, with an increasing population and built area all over the world, the consequences of natural disasters tend to be greater. In The US, these events have caused several damages in terms of loss of properties or even worse, the loss of human lives. In the following report, you will find a brief summary of the cost of natural disasters in The US, measured in fatalities, injuries and property damage. This is by no means a comprehensive analysis of the consequences of weather-related events, although it is an exploratory view of how these affect the country in several aspects. In particular, this analysis focuses on the different types of events that have ocurred between 1950 and 2011. Furthermore, in this analysis the focus is on those types of events that have had ocurred several times in that timespan and have had significant effects in terms of deaths, injured people, and millions of dollars lost in property and crop damage.
+
 First, we load the necessary packages
 ```{r message=FALSE}
 library(data.table) #Reading data
 library(dplyr) #handling data
 library(plyr) #Mapping values in dataFrames
 library(ggplot2) #Plotting system
-library(cowplot) #ggplot2 plot grids
 ```
 
 
@@ -31,10 +32,10 @@ Next, the zip file is loaded in R using the `fread()` from the data.table packag
 storm <- fread('stormData.csv.bz2', na.strings = c('NA'), select = c('EVTYPE', 'FATALITIES', 'INJURIES', 'PROPDMG', 'PROPDMGEXP', "CROPDMG", "CROPDMGEXP"), colClasses = list(factor = c('EVTYPE')))
 
 storm$PROPDMGEXP <- as.numeric(mapvalues(tolower(storm$PROPDMGEXP), from = c('', '?', '+', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', 'h', 'k', 'm', 'b'), to = c(1, 0, 1, 1, 1, 0, 10^2, 10^3, 10^4, 10^5, 10^6, 10^7, 10^8, 10^2, 10^3, 10^6, 10^9)))
-storm$TotalPropertyDamage <- storm$PROPDMG * storm$PROPDMGEXP
+storm$TOTALPROPDMG <- storm$PROPDMG * storm$PROPDMGEXP
 
 storm$CROPDMGEXP <- as.numeric(mapvalues(tolower(storm$CROPDMGEXP), from = c('', '?', '0', '2', 'k', 'm', 'b'), to = c(1, 0, 1, 10^2, 10^3, 10^6, 10^9)))
-storm$TotalCropDamage <- storm$CROPDMG * storm$CROPDMGEXP
+storm$TOTALCROPDMG <- storm$CROPDMG * storm$CROPDMGEXP
 ```
 The mapped values are:  
 
@@ -52,15 +53,53 @@ byEventType <- storm %>%
               AvgFatalities = round(mean(FATALITIES, na.rm = T), 2), #Mean number of fatalities
               TotalInjuries = sum(INJURIES), #Total number of injuries
               AvgInjuries = round(mean(INJURIES, na.rm = T), 2), #Mean number of injuries
-              TotalPropertyDamage = sum(TotalPropertyDamage), #Total property damage cost
-              AvgPropertyDamage = round(mean(TotalPropertyDamage, na.rm = T), 2), #Mean property damage cost
-              TotalCropDamage = sum(TotalCropDamage), #Total property damage cost
-              AvgCropDamage = round(mean(TotalCropDamage, na.rm = T), 2)) #Mean crop damage cost
-```
-
-After summarising the data, I decided to filter the events by those that have ocurred at least 6 times, since some of the types are very specific, such as TORNADOES, TSTM WIND, HAIL. So removed them and that shortened the table from `r nrow(byEventType)` rows to 225 records.
-```{r}
-commonEvents <- byEventType[byEventType$TotalEvents > 5, ]
+              TotalPropertyDamage = sum(TOTALPROPDMG), #Total property damage cost
+              AvgPropertyDamage = round(mean(TOTALPROPDMG, na.rm = T), 2), #Mean property damage cost
+              TotalCropDamage = sum(TOTALCROPDMG), #Total property damage cost
+              AvgCropDamage = round(mean(TOTALCROPDMG, na.rm = T), 2)) #Mean crop damage cost
 ```
 
 # Results
+After summarising the data, I decided to filter the events by those that have ocurred at least once, since some of the types are very specific, such as TORNADOES, TSTM WIND, HAIL. In addtion, for the current analysis I removed every row that does not contain any fatality or injury, or where the total crop and property damage is 0. With these changes, the summary table went from `r nrow(byEventType)` rows to 53 records.
+```{r events}
+events <- byEventType[byEventType$TotalEvents > 1, ]
+events <- events[events$TotalInjuries > 0, ]
+events <- events[events$TotalFatalities > 0, ]
+events <- events[events$TotalPropertyDamage > 0, ]
+events <- events[events$TotalCropDamage > 0, ]
+```
+
+## Fatalities
+The number of fatalities changes by type, but in general, if the high number of deaths for a certain type of event are due to a high number of times that event has ocurred. Nonetheless, there are some cases where an event has had several deaths, but has ocurred just a few times. In the following chart, the total number of events are shown per type of event. Notice the scale of the x axis is log10.  
+```{r fatalities, fig.height=10, fig.width=10}
+ggplot(events) + 
+    geom_bar(stat = 'identity', aes(x = TotalFatalities, y = reorder(EVTYPE, TotalFatalities)), fill = 'red4') + 
+    geom_text(aes(label = paste('n = ', TotalFatalities, 'μ = ', AvgFatalities), x = TotalFatalities , y = EVTYPE), position = position_dodge(0.9), hjust = -0.05, size = 4) +
+    scale_x_log10(limits = c(1, 70000), expand = c(0, 0)) + 
+    labs(x = 'Total Number of Fatalities', y = 'Type of Event', title = 'Total Number of Fatalities per Type of Event', subtitle = 'n = Total number of fatalities, μ = Average number of fatalities') +
+    theme(plot.title = element_text(size = 27), plot.subtitle = element_text(size = 15), axis.title = element_text(size = 15), axis.text = element_text(size = 9), panel.grid.major.y = element_blank(), panel.background = element_blank(), panel.grid.major.x = element_line(colour = 'grey', linetype = 3))
+```
+
+## Injuries
+Just as in the fatalities, with injuries the number of times an event has happened is a critical aspect. Below there is a chart of the average number of injuries per type of event. Notice the scale of the x axis is squared root.
+```{r injuries, fig.height=10, fig.width=10}
+ggplot(events) + 
+    geom_bar(stat = 'identity', aes(x = AvgInjuries, y = reorder(EVTYPE, AvgInjuries)), fill = 'blue4') + 
+    geom_text(aes(label = paste('μ = ', AvgInjuries, 'n = ', TotalInjuries), x = AvgInjuries , y = EVTYPE), position = position_dodge(0.9), hjust = -0.05, size = 4) +
+    scale_x_sqrt(limits = c(0, 23), expand = c(0,0), breaks = seq(0, 16, 2)) +
+    labs(x = 'Average Number of Injuries', y = 'Type of Event', title = 'Average Number of Injuries per Type of Event', subtitle = 'μ = Average number of Injuries, n = Total number of Injuries') +
+    theme(plot.title = element_text(size = 27), plot.subtitle = element_text(size = 15), axis.title = element_text(size = 15), axis.text = element_text(size = 9), panel.grid.major.y = element_blank(), panel.background = element_blank(), panel.grid.major.x = element_line(colour = 'grey', linetype = 3))
+```
+
+## Property Damage
+For the analysis of property damage, it is a bit trickier. First, I created anew variable with the average property damage per type in millions, so that it is easier to build the barplot. Then the syntaxis of the plot is pretty much the same as the others. Notice the scale is logarithmic.
+```{r PropertyDamage, fig.height=10, fig.width=10}
+events$AvgPropertyDamageMill <- round(events$AvgPropertyDamage / 10 ^ 6, 5)
+
+ggplot(events) + 
+    geom_bar(stat = 'identity', aes(x = AvgPropertyDamageMill + 1, y = reorder(EVTYPE, AvgPropertyDamage)), fill = 'green4') + 
+    geom_text(aes(label = paste('$', AvgPropertyDamageMill), x = AvgPropertyDamageMill + 1, y = EVTYPE), position = position_dodge(0.9), hjust = -0.05, size = 4) +
+    scale_x_log10(limits = c(1, 2000), expand = c(0, 0)) +
+    labs(x = 'Property Damage in USD Millions', y = 'Type of Event', title = 'Average Property Damage per Type of Event') +
+    theme(plot.title = element_text(size = 27), plot.subtitle = element_text(size = 15), axis.title = element_text(size = 15), axis.text = element_text(size = 9), panel.grid.major.y = element_blank(), panel.background = element_blank(), panel.grid.major.x = element_line(colour = 'grey', linetype = 3))
+```
