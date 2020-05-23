@@ -1,0 +1,66 @@
+---
+title: "Exponential Distribution Simulation"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "22/5/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
+```
+
+As a first step, it is necessary to load the necessary packages and set the working directory.
+```{r eval=FALSE}
+setwd('./Statistical_Inference')
+```
+```{r pacakges, message=FALSE}
+library(ggplot2) #plooting system
+library(cowplot) #Panel for ggplot2
+```
+
+# Exponential Distribution Simulation
+
+## Overview
+In the following exercise, I am going to show the properties of the exponential distribuiton and how to simulate this distribution and the mean of the simulation follows a normal distribution.
+
+## Simulations
+First, we define \lambda, the number of observations for each simulation and the number of simulations for the `rexp()` function.
+```{r base}
+lambda <- .2
+n <- 40
+sim <- 1000
+```
+
+Then we simulate the data and build a matrix where each row is a simulation and the columns are the observations (sim x n). The `replicate()` function performs `rexp()` the number of times defind in `sim`, while `matrix()` builds the matrix.
+```{r simulation}
+set.seed(941104)
+simulation <- matrix(replicate(sim, rexp(n, lambda)), sim, n)
+```
+
+## Sample Mean versus Theoretical Mean
+First, we must define the theoretical mean of the exponential distribution ($1/\lambda $) and find the mean for each simulation.
+```{r sim_mean}
+teo_mean <- 1 / lambda
+sim_mean <- rowMeans(simulation)
+```
+
+Then, we build a histogram of the mean for each simulation and draw a vertical line showcasing the theoretical mean, and another line showing the simulated mean of the means.
+```{r mean_hist, fig.width=10, fig.height=5, warning=FALSE, message=FALSE}
+mean_hist <- ggplot() + geom_histogram(aes(x = sim_mean), color = 'gray', fill = 'lightgrey') +
+     geom_vline(aes(xintercept = teo_mean), color = 'red4', size = 1) +
+    geom_vline(aes(xintercept = mean(sim_mean)), color = 'blue4', size = 1) +
+    labs(x = 'Simulation Mean', y = 'Frequency') +
+    theme_cowplot()
+
+mean_hist_close <- mean_hist + scale_x_continuous(limits = c(4.9, 5.1))
+
+plot_grid(mean_hist, mean_hist_close)
+```
+
+As shown in the histograms above, where the blue line represents the simulated mean `r mean(sim_mean)`and the red show the theoretical mean `r teo_mean`, they are very close to each other. In fact, they differ by just `r teo_mean - mean(sim_mean)`.
+
+## Sample Variance versus Theoretical Variance
+
+## Distribution

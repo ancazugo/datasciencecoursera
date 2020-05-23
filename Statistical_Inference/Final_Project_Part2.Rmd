@@ -1,0 +1,86 @@
+---
+title: "Hypothesis Testing Using the T Test"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "22/5/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
+```
+
+As a first step, it is necessary to load the necessary packages and set the working directory.
+```{r eval=FALSE}
+setwd('./Statistical_Inference')
+```
+```{r pacakges, message=FALSE}
+library(ggplot2) #plooting system
+library(cowplot) #Panel for ggplot2
+```
+
+# Exploratory Data Analysis and Hypothesis Testing
+First we load the data and show the structure and summary of the variables.
+```{r tootgrowth}
+data("ToothGrowth")
+str(ToothGrowth)
+summary(ToothGrowth)
+```
+
+Then, we build some visualizations to see the distribution of the variables and the relationship between them.
+```{r plots, fig.width=10, fig.height=5}
+main <-ggplot(ToothGrowth, aes(x = factor(dose), y = len)) + 
+    geom_boxplot(aes(fill = supp)) + 
+    labs(x = 'Dose', y = 'Length', fill = 'Supplement') +
+    theme_light() + theme(legend.position = 'none')
+
+dist <- ggplot(ToothGrowth, aes(x = len, fill = supp)) + 
+    geom_histogram(binwidth = 1) + geom_density(aes(y = ..count.., fill = NULL)) +
+    facet_grid(vars(dose), vars(supp)) + 
+    labs(x = 'Length', y = 'Frequency', fill = 'Supplement') +
+    theme_light()
+
+plot_grid(main, dist)
+```
+
+## Supplement Effect on Tooth Length
+In the first analysis I will compare the mean of the tooth length according to the supplement each study subject took.
+$$H_{0}: \mu_{OJ} = \mu_{VC}$$
+$$H_{a}: \mu_{OJ} \neq \mu_{VC}$$
+
+I want to check if there is a significant difference between observation with both types of supplements. For this reason, I need a t test for independant samples.
+```{r supp}
+t_test <- t.test(len ~ supp, data = ToothGrowth)
+t_test$conf.int
+```
+
+According to this test, with a p-value of **`r t_test$p.value`** an a confidence interval of **[`r t_test$conf.int[1]`, `r t_test$conf.int[2]`]**. According to these results, it is not possible to reject the null hypothesis, therefore, the supplement does not have an effect on tooth growth. In addition, the confidenci interval contains 0, which adds to the conclusion of not rejecting the null hypothesis.
+
+## Dose Effect on Tooth Length
+For this test, it is necessary to make subsets for each dose. For any case these would be the hypothesis:
+$$H_{0}: \mu_{a} = \mu_{b}$$
+$$H_{a}: \mu_{a} \neq \mu_{b},$$ 
+for $a$ and $b$ being two types of doses within the dataset $(0.5, 1, 2)$.
+
+For this analysis, I will create a function to subset the dataset, removing one of the doses and comparing the mean of the other two in a t test.
+```{r dose}
+t_test_dose <- function(dose1, dose2) {
+    df <- subset(ToothGrowth, dose %in% c(dose1, dose2))
+    return(t.test(len ~ dose, data = df))
+}
+
+dose0.5_vs_1 <- t_test_dose(0.5, 1)
+dose1_vs_2 <- t_test_dose(1, 2)
+dose0.5_vs_2 <- t_test_dose(0.5, 2)
+```
+
+The following table show the p-value and the confidence intervals for each of the tests:
+
+| Comparison 	| p-value 	| Confidence Interval 	|
+|--------------------	|---------	|---------------------	|
+| Dose 0.5 vs Dose 1 	| `r dose0.5_vs_1$p.value` 	| [`r dose0.5_vs_1$conf.int[1]`, `r dose0.5_vs_1$conf.int[2]`] 	|
+| Dose 1 vs Dose 2 	| `r dose1_vs_2$p.value` 	| [`r dose1_vs_2$conf.int[1]`, `r dose1_vs_2$conf.int[2]`] 	|
+| Dose 0.5 vs Dose 2 	| `r dose0.5_vs_2$p.value` 	| [`r dose0.5_vs_2$conf.int[1]`, `r dose0.5_vs_2$conf.int[2]`] 	|
+
+According to these results, for every type of doses, it is possible to reject the null hypothesis. In all three cases, the confidence interval do not contain zero, adding evidence to the statistical conclusion. Given these results, the dose does have an effect on tooth length.
