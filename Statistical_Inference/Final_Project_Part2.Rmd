@@ -1,8 +1,9 @@
 ---
 title: "Hypothesis Testing Using the T Test"
 author: "Andres Camilo Zuñiga Gonzalez"
-date: "22/5/2020"
+date: "23/5/2020"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -16,11 +17,11 @@ As a first step, it is necessary to load the necessary packages and set the work
 setwd('./Statistical_Inference')
 ```
 ```{r pacakges, message=FALSE}
-library(ggplot2) #plooting system
+library(ggplot2) #Plotting system
 library(cowplot) #Panel for ggplot2
 ```
 
-# Exploratory Data Analysis and Hypothesis Testing
+# Exploratory Data Analysis
 First we load the data and show the structure and summary of the variables.
 ```{r tootgrowth}
 data("ToothGrowth")
@@ -44,7 +45,7 @@ dist <- ggplot(ToothGrowth, aes(x = len, fill = supp)) +
 plot_grid(main, dist)
 ```
 
-## Supplement Effect on Tooth Length
+# Supplement Effect on Tooth Length Hypothesis Testing
 In the first analysis I will compare the mean of the tooth length according to the supplement each study subject took.
 $$H_{0}: \mu_{OJ} = \mu_{VC}$$
 $$H_{a}: \mu_{OJ} \neq \mu_{VC}$$
@@ -52,16 +53,15 @@ $$H_{a}: \mu_{OJ} \neq \mu_{VC}$$
 I want to check if there is a significant difference between observation with both types of supplements. For this reason, I need a t test for independant samples.
 ```{r supp}
 t_test <- t.test(len ~ supp, data = ToothGrowth)
-t_test$conf.int
 ```
 
 According to this test, with a p-value of **`r t_test$p.value`** an a confidence interval of **[`r t_test$conf.int[1]`, `r t_test$conf.int[2]`]**. According to these results, it is not possible to reject the null hypothesis, therefore, the supplement does not have an effect on tooth growth. In addition, the confidenci interval contains 0, which adds to the conclusion of not rejecting the null hypothesis.
 
-## Dose Effect on Tooth Length
+# Dose Effect on Tooth Length Hypothesis Testing
 For this test, it is necessary to make subsets for each dose. For any case these would be the hypothesis:
 $$H_{0}: \mu_{a} = \mu_{b}$$
 $$H_{a}: \mu_{a} \neq \mu_{b},$$ 
-for $a$ and $b$ being two types of doses within the dataset $(0.5, 1, 2)$.
+for $a$ and $b$ being two different types of doses in {$0.5, 1, 2$}.
 
 For this analysis, I will create a function to subset the dataset, removing one of the doses and comparing the mean of the other two in a t test.
 ```{r dose}
@@ -83,4 +83,5 @@ The following table show the p-value and the confidence intervals for each of th
 | Dose 1 vs Dose 2 	| `r dose1_vs_2$p.value` 	| [`r dose1_vs_2$conf.int[1]`, `r dose1_vs_2$conf.int[2]`] 	|
 | Dose 0.5 vs Dose 2 	| `r dose0.5_vs_2$p.value` 	| [`r dose0.5_vs_2$conf.int[1]`, `r dose0.5_vs_2$conf.int[2]`] 	|
 
-According to these results, for every type of doses, it is possible to reject the null hypothesis. In all three cases, the confidence interval do not contain zero, adding evidence to the statistical conclusion. Given these results, the dose does have an effect on tooth length.
+According to these results, for every type of doses, it is possible to reject the null hypothesis. In all three cases, the confidence interval do not contain zero, adding evidence to the statistical conclusion. Given these results, the dose does have an effect on tooth length.  
+It is worth noting that in order to do a t test, samples must be random, and must be representative of the population, and the variances of the two groups to be compared must be equal.
