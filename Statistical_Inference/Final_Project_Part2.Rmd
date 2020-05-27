@@ -12,7 +12,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
 ```
 
-As a first step, it is necessary to load the necessary packages and set the working directory.
+As a first step, it is necessary to load the packages and set the working directory.
 ```{r eval=FALSE}
 setwd('./Statistical_Inference')
 ```
