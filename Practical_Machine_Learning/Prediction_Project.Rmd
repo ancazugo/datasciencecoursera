@@ -1,0 +1,141 @@
+---
+title: "Weightlifting Prediction Analysis Using PCA and Random Forests"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "28/5/2020"
+output: html_document
+---
+
+See the web version of this notebook in https://rpubs.com/ancazugo/weightliftingprediction
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, options(scipen=999))
+```
+# Data Cleaning
+
+As a first step, it is necessary to load the packages and set the working directory.
+```{r eval=FALSE}
+setwd('./Practical_Machine_Learning/')
+```
+```{r pacakges, message=FALSE}
+library(tidyverse) #Loads ggplot2, tidyr and dplyr
+library(caret) #Machine learning algorithms
+library(doParallel) #Parallel computation
+library(knitr) #HTML rendering
+library(kableExtra) #Table formatting
+```
+
+Secondly, we download the train a test datasets from the links
+```{r data, eval=FALSE}
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', destfile = 'pml-train.csv')
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', destfile = 'pml-test.csv')
+```
+And then, load them to R as dataFrames.
+```{r load}
+train <- read.csv('pml-train.csv', na.strings=c('#DIV/0', '#DIV/0!', '', 'NA'))
+test <- read.csv('pml-test.csv', na.strings=c('#DIV/0', '#DIV/0!', '', 'NA'))
+```
+
+First, some variables are going to be removed from both the train a test datasets, since they are of no particular value to this analysis (e.g. user_name, X). Of the remaining variables, number of NAs will be calculated using dplyr. Then those columns that have more than 95% of their values missing will be removed. Lastly, the `new_window` variable will be converted to numeric.
+```{r removeCols}
+colsRemoved <- c('X', 'user_name', 'cvtd_timestamp', 'problem_id')
+
+colsNA <- train %>%
+    summarise_all(funs(sum(is.na(.) / nrow(train))))
+
+for(col in 1:ncol(colsNA)) {
+    if (colsNA[,col] > 0.95) {
+        colsRemoved <- c(colsRemoved, colnames(colsNA)[col])
+    }
+}
+new_windowNum <- c('no' = 0,'yes' = 1)
+train$new_window <- new_windowNum[train$new_window]
+test$new_window <- new_windowNum[test$new_window]
+
+train <- train[, !(colnames(train) %in% colsRemoved)]
+test <- test[, !(colnames(test) %in% colsRemoved)]
+```
+
+From the original dataset of 159 variables only 56 are left. 
+
+# Exploratory Data Analysis
+
+In order to preview the data we are going to build a histogram for each variable using `ggplot2` and `dplyr`.
+```{r histograms, fig.align='center', fig.width=10, fig.height=10}
+train %>%
+    select(-new_window, -classe) %>% 
+    gather() %>% 
+    ggplot(aes(value)) +
+    facet_wrap(~ key, scales = "free") +
+    geom_histogram(aes())
+```
+
+From the plot above it is possible to see several distributions, particularly uniform, bimodal, normal and Poisson. While I won't explain each variable, particularly because the names are not visible in the plot, the reader can replicate can replicate this process and see for him/herself the distribution of the whole dataset.
+
+Then, I will build a summary table of the mean of each variable for each `classe` and `new_window`.
+```{r summary}
+trainSummary <- train %>%
+    group_by(classe, new_window) %>%
+    summarise_all(funs(mean(.)))
+kable(trainSummary) %>%
+    kable_styling() %>%
+    scroll_box(width = '100%')
+```
+
+# Prediction Model
+
+As evidenced by the summary above, the variable to be predicted is Class, which classifies participants according to their correctness performing a dumbbell biceps curl 10 times. This variable has five values in regard to their performance:
+
+* **A:** Exactly according to the specification
+* **B:** Throwing Elbows to the front
+* **C:** Lifting the dumbbell only halfway
+* **D:** Lowering the dumbbell only halfway
+* **E:** Throwing the hips to the front
+
+However, there are still many variables that could possibly be related. Think of all those variables that measure the same metric but in different axis. So in order to solve this, the best method is to do a **Principal Component Analysis** to reduce the number of variables. For this purpose I will use the `prcomp()` function. Then, I will transpose and transform the cumulative Proportion summary (Importance) in a dataFrame that can be plotted with `ggplot2`.
+
+```{r PCA}
+trainPCA <- prcomp(train[, -57], scale. = T, center = T)
+PCAsummary <- summary(trainPCA)$importance
+PCAsummary <- data.frame(t(PCAsummary))
+PCAsummary$PCA <- seq(1, nrow(PCAsummary))
+ggplot(PCAsummary, aes(x = PCA, y = Cumulative.Proportion)) + geom_point() + theme_bw()
+```
+From the plot above it is possible to determine that around 40 PCs are necessary to explain 100% of the variance in the dataset, nonetheless, this would be close to the number of original number of variables in the clean training dataset. Therefore I will use the `preProcess()` function from the `caret` package to process the data. This will be done in order to keep the PCs that explain up to 95% of the variance, which if you check the summary above is 27 PCs. Then I will predict the new variables that will be used to train the final model.
+
+```{r preprocess}
+preProc <- preProcess(train[,-57], method = 'pca', thresh = 0.95)
+trainPC <- predict(preProc, train[,-57])
+trainPC$classe <- train$classe
+```
+
+After doing the PCA on the dataset and adding the outcome variable, I will build a **Random Forest** prediction model using the PCs from the previous step. However, in order to reduce time, I will train the model in parallel using the functions `detectCores()`, `makePSOCKcluster()`, `registerDoParallel` and `stopCluster()` from the `doParallel` package. Note: This step might take some time, depending on your PC.
+
+```{r randomForest}
+ncores <- detectCores() - 1
+cl <- makePSOCKcluster(ncores)
+registerDoParallel(cl)
+start_time <- Sys.time()
+modelRF <- train(classe ~ ., method = 'rf', data = trainPC, list = F)
+end_time <- Sys.time()
+stopCluster(cl)
+end_time - start_time
+```
+
+Since and out-of-sample error cannot be calculated, I will calculate the in-of-sample error on the training dataset using the `confusionMatrix()` function.
+
+```{r confusion}
+trainPred <- predict(modelRF, trainPC[,-28])
+confusionMatrix(table(trainPred, train$classe))
+```
+From these results, the model is highly accurate, sensitive and specificity, although these metrics are based on the predictions of the training dataset.
+
+Finally, I predict the PCs on the test set and use that outcome to predict the class based on the Random Forest model.
+```{r prediction}
+testPC <- predict(preProc, test)
+classPrediction <- predict(modelRF, testPC)
+kable(data.frame(Case = seq(1:20), classPrediction), align = 'c') %>%
+  kable_styling(full_width = F, fixed_thead = T) %>%
+    scroll_box(height = '20%')
+```
+
+From the quiz in Coursera, this is the correct outcome for all the cases.
