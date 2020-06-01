@@ -1,0 +1,45 @@
+---
+title: "Volcanic Eruptions in the Holocene"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "31/5/2020"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(leaflet)
+library(htmltools)
+```
+```{r eval=FALSE, include=FALSE}
+setwd('./Developing_Data_Products/Week2/')
+```
+
+
+## Volcanic Eruptions Overview
+
+This is world map of the last eruptions of active volcanos during the Holocene (last 11.700 years) by The [Smithsonian Institution Global Volcanism Program](https://volcano.si.edu/). This is a sneak peek of the data set.
+
+```{r comment=''}
+volcano <- read.csv('volcano.csv')
+str(volcano)
+```
+***
+```{r map, message=FALSE, warning=FALSE, fig.align='center', fig.height=6}
+volcanoIcon <- makeIcon(
+    iconUrl = 'volcano_img.png',
+    iconWidth = 38, iconHeight = 50,
+    iconAnchorX = 19, iconAnchorY = 25
+)
+map <- volcano %>%
+    leaflet(width = "100%") %>%
+    addTiles() %>%
+    addMarkers(clusterOptions = markerClusterOptions(), icon = volcanoIcon,
+               popup = paste(
+                   "<b>Name:</b>", volcano$Name, "<br>", 
+                   "<b>Country:</b>", volcano$Country, "<br>",
+                   "<b>Last Known Eruption:</b>", volcano$Last.Known.Eruption, "<br>",
+                   "<b>Elevation (m):</b>", volcano$Elevation..Meters.
+               ))
+map
+```
+
