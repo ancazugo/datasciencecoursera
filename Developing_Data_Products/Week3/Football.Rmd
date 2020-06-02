@@ -1,0 +1,67 @@
+---
+title: "South American Football Head 2 Head"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "31/5/2020"
+output: ioslides_presentation
+---
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(RColorBrewer)
+library(lubridate)
+library(plotly)
+```
+```{r eval=FALSE, include=FALSE}
+setwd('./Developing_Data_Products/Week3/')
+```
+
+```{r}
+football <- read.csv('football.csv', encoding = 'UTF-8')
+```
+
+```{r}
+south_america <- c('Argentina', 'Bolivia', 'Brazil', 'Chile', 'Colombia', 'Ecuador', 'Paraguay', 'Peru', 'Uruguay', 'Venezuela')
+football$date <- as.POSIXct(football$date)
+conmebol <- football[football$home_team %in% south_america & football$away_team %in% south_america,]
+conmebol <- conmebol %>%
+    #filter(neutral == F) %>%
+    mutate(Year = year(date), GoalDiff = home_score - away_score) %>%
+    mutate(Result = if_else(GoalDiff > 0, 'Home', if_else(GoalDiff < 0, 'Away', 'Tie')))
+```
+
+```{r}
+matches <- conmebol %>%
+    count(home_team, away_team, Result) %>%
+    pivot_wider(names_from = Result, values_from = n) %>%
+    replace_na(list(Home = 0, Away = 0, Tie = 0)) %>%
+    mutate(TotalMatches = Home + Tie + Away)
+
+goals <- conmebol %>%
+    group_by(home_team, away_team) %>%
+    dplyr::summarise(Goals = sum(home_score), GoalsConceded = sum(away_score), GoalDiff = sum(GoalDiff))
+    
+df <- merge(matches, goals)
+```
+
+```{r}
+brewerpalette <- colorRampPalette(brewer.pal(12, 'RdYlBu'))
+
+p <- ggplot(df, aes(x = away_team, y = home_team, fill = 100 * Home / TotalMatches, text = paste(home_team, 'vs', away_team, '\nTotal Matches:', TotalMatches, '\nHome Wins:', Home, '\nAway Wins:', Away, '\nTies:', Tie))) + 
+    geom_tile() + coord_equal() + scale_x_discrete(position = 'top') + 
+    labs(x = 'Away Team', y = 'Home Team') +
+    theme(panel.grid = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_rect(color = 'black', fill = NA),
+          axis.text.y = element_text(size = 15),
+          axis.text.x = element_text(angle = 40, size = 15, hjust = 0),
+          axis.title = element_text(size = 15),
+          strip.background = element_blank(),
+          legend.title = element_text(size = 15, vjust = 1)) +
+    scale_fill_gradientn(colours = brewerpalette(20), name = '% Home Wins', breaks = as.integer)
+```
+
+***
+```{r fig.width=8, fig.height=6, fig.align='center'}
+ggplotly(p, tooltip = c('text'))
+```
+
