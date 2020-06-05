@@ -1,8 +1,11 @@
 library(shiny)
+library(dplyr)
 
 # Define server logic required to draw montecarlo simulation
-shinyServer(function(input, output) {
-
+shinyServer(function(input, output, session) {
+    url <- a("Slides", href="https://rpubs.com/ancazugo/montecarlopi")
+    #output$text <- renderText({paste('Number of points in circle = ', p, '. pi = ', x)})
+    output$see <- renderUI({tagList("Visit these ", url, 'for more information')})
     output$piPlot <- renderPlot({
 
         drawCircle <- function(origin = c(0, 0), radius = 1, npoints = 1000) {
@@ -12,30 +15,52 @@ shinyServer(function(input, output) {
             return(data.frame(xvalues, yvalues))
         }
         
-        isInCircle <- function(radius, origin = c(0, 0), xcoord, ycoord) {
-            d <- sqrt((xcoord - origin[1]) ** 2 + (ycoord - origin[2]) ** 2)
-            ans <- F
-            if(d <= radius) {
-                ans <- T
-            }
-            return(ans)
-        }
         radius <- input$radius
         n <- input$points
+        seedx <- input$seedx
+        #seedy <- input$seedy
+        seedy <- as.numeric(paste(rev(strsplit(as.character(seedx), '')[[1]]), sep = ''))
         
-        x_coords <- runif(n, 0, radius)
-        y_coords <- runif(n, 0, radius)
+        set.seed(seedx)
+        x_coords <- runif(n, -radius, radius)
+        set.seed(seedy)
+        y_coords <- runif(n, -radius, radius)
         points_df <- data.frame(x_coords, y_coords)
         
-        in_circle <- points_df[isInCircle(radius = radius, xcoord = points_df$x_coords, ycoord = y_coords), ]
-        out_circle <- points_df[!isInCircle(radius = radius, xcoord = points_df$x_coords, ycoord = y_coords), ]
+        in_circle <- points_df %>% 
+            filter(sqrt(x_coords ** 2 + y_coords ** 2) <= radius)
+        
+        out_circle <- points_df %>% 
+            filter(sqrt(x_coords ** 2 + y_coords ** 2) > radius)
         
         circle <- drawCircle(radius = radius)
         
-        plot(y_coords ~ x_coords, points_df, col = rgb(red = 0, green = 0, blue = 1, alpha = 0.5))
-        points(y_coords ~ x_coords, points_df, col = rgb(red = 1, green = 0, blue = 0, alpha = 0.5))
-        ifelse(input$show_circle, plot(yvalues ~ xvalues, circle, type = 'l'))
-
+        pi_est <- as.character(format(round(4 * nrow(in_circle) / nrow(points_df), 5), nsmall = 5))
+        pointsCircle <- as.character(nrow(in_circle))
+        
+        title <- bquote(paste('Number of points in circle = ', .(pointsCircle), '. ', pi, ' = ', .(pi_est)))
+        
+        plot(y_coords ~ x_coords, in_circle, col = rgb(red = 0, green = 0, blue = 1, alpha = 0.5),
+             ylim = c(-radius, radius), xlim = c(-radius, radius), pch = 19, xlab = '', ylab = '', main = title,
+             cex.main = 2, yaxt = 'n', xaxt = 'n')
+        axis(1, at = seq(-radius, radius, radius / 2))
+        axis(2, at = seq(-radius, radius, radius / 2))
+        
+        points(y_coords ~ x_coords, out_circle, col = rgb(red = 1, green = 0, blue = 0, alpha = 0.5), pch = 19)
+        
+        circleColor <- ifelse(input$circle, rgb(red = 0, green = 0.39, blue = 0, alpha = 0.75),
+                              rgb(red = 0, green = 1, blue = 0, alpha = 0))
+        
+        lines(yvalues ~ xvalues, circle, type = 'l', col = circleColor, lwd = 2)
+        
+        squareColor <- ifelse(input$square, rgb(red = 0, green = 0.39, blue = 0, alpha = 0.75),
+                              rgb(red = 0, green = 1, blue = 0, alpha = 0))
+        
+        rect(-radius, -radius, radius, radius, border = squareColor, lwd = 2)
+        
+        
+    }, height = function() {
+        session$clientData$output_piPlot_width
     })
 
 })

@@ -1,36 +1,29 @@
-#
-# This is the user-interface definition of a Shiny web application. You can
-# run the application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 
-# Define UI for application that draws a histogram
+# Define UI for application that draws a plot
 shinyUI(fluidPage(
 
     # Application title
-    titlePanel("International Football Head to Head"),
+    titlePanel("Estimation of π via Montecarlo"),
 
     # Sidebar with a slider input for number of bins
     sidebarLayout(
         sidebarPanel(
-            h1('Montecarlo Pi parameters'),
-            h2('Pick a radius value'),
-            numericInput('radius', 'radius', min = 1, max = 100, step = 1),
-            h2('Pick a number of random points'),
-            numericInput('points', 'points', min = 0, max = 10^6, step = 1),
-            checkboxInput('show_circle', inputId = 'show_circle', value = T)
+            h1('Montecarlo π parameters'),
+            numericInput('radius', 'Circle Radius', min = 1, max = 100, step = 0.1, value = 1),
+            numericInput('points', 'Number of Random Points', min = 0, max = 10^7, step = 1, 10),
+            numericInput('seedx', 'Set Seed for Random Points (avoid palindromic numbers)',
+                         min = 10, max = 10^7, step = 1, value = 123456),
+            #('seedy', 'Set Numeric Seed for Y Coordinates', min = 1, max = 10^7, step = 1, 654321),
+            checkboxInput('circle', 'Draw Circle', value = T),
+            checkboxInput('square', 'Draw Square', value = T),
+            uiOutput('see')
         ),
 
         # Show a plot of the generated distribution
         mainPanel(
-            h1('Montecarlo Estimation of Pi'),
-            plotOutput("piPlot"),
-            p('The estimated value of pi with x random points is')
+            # textOutput('text'),
+            plotOutput("piPlot", width = '70%', height = "auto")
         )
     )
 ))
