@@ -17,13 +17,11 @@ shinyServer(function(input, output, session) {
         
         radius <- input$radius
         n <- input$points
-        seedx <- input$seedx
-        #seedy <- input$seedy
-        seedy <- as.numeric(paste(rev(strsplit(as.character(seedx), '')[[1]]), sep = ''))
+        seed <- input$seed
         
-        set.seed(seedx)
+        set.seed(seed)
         x_coords <- runif(n, -radius, radius)
-        set.seed(seedy)
+        set.seed(-seed)
         y_coords <- runif(n, -radius, radius)
         points_df <- data.frame(x_coords, y_coords)
         
@@ -38,11 +36,12 @@ shinyServer(function(input, output, session) {
         pi_est <- as.character(format(round(4 * nrow(in_circle) / nrow(points_df), 5), nsmall = 5))
         pointsCircle <- as.character(nrow(in_circle))
         
-        title <- bquote(paste('Number of points in circle = ', .(pointsCircle), '. ', pi, ' = ', .(pi_est)))
+        title <- bquote(paste(pi, ' = ', .(pi_est)))
+        subtitle <- bquote(paste('# points in circle = ', .(pointsCircle)))
         
         plot(y_coords ~ x_coords, in_circle, col = rgb(red = 0, green = 0, blue = 1, alpha = 0.5),
              ylim = c(-radius, radius), xlim = c(-radius, radius), pch = 19, xlab = '', ylab = '', main = title,
-             cex.main = 2, yaxt = 'n', xaxt = 'n')
+             sub = subtitle, cex.main = 2, cex.sub = 2, yaxt = 'n', xaxt = 'n')
         axis(1, at = seq(-radius, radius, radius / 2))
         axis(2, at = seq(-radius, radius, radius / 2))
         

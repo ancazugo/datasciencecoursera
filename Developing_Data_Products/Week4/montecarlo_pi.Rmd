@@ -7,7 +7,6 @@ output:
     theme: night
     reveal_options:
       slideNumber: true
-
 ---
 
 ```{r setup, include=FALSE}
@@ -42,7 +41,7 @@ See the app [here](https://ancazugo.shinyapps.io/montecarlo_pi/).
 
 # Circle and Square Areas
 
-Given a circle with radius $r$ inside a square like the one below:
+Given a circle with radius $r$ inside a square like the one below generated with `r`:
 <br />
 ```{r circle, fig.align='center', fig.width=4, fig.height=4, echo=FALSE}
 drawCircle <- function(origin = c(0, 0), radius = 1, npoints = 1000) {
