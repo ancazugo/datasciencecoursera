@@ -1,0 +1,312 @@
+---
+title: "Exploratory Data Analysis of SwiftKey Data"
+author: "Andres Camilo Zuñiga Gonzalez"
+date: "19/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, eval=FALSE}
+setwd('./Data_Science_Capstone/')
+```
+
+```{r packages, warning=FALSE, message=FALSE}
+library(tidyverse) #ggplot and general data wrangling and reading
+library(ngram) #nchar function
+library(knitr) #table visualization
+library(kableExtra) #table visualization
+library(tidytext) #text handling
+library(parallel) #parallel processing
+library(cowplot) #ggpplot2 subplots
+```
+
+# Visual Exploratory Analysis of File Info
+
+First, I created two vectors containing the different languages as specified in the files, and the origin of the files, in order to paste both and create the path to each file.
+```{r filepaths}
+langs <- c('en_US/en_US', 'ru_RU/ru_RU', 'de_DE/de_DE', 'fi_FI/fi_FI')
+texts <- c('.blogs.txt', '.news.txt', '.twitter.txt')
+
+names <- NULL
+for(lang in langs) {
+    for(text in texts) {
+        file <- paste0(lang, text)
+        names <- c(names, file)
+    }
+}
+```
+
+Then I created a dataframe where the first column is the result of the previous loop. Next I created a function that takes the path to a file a returns a vector containing its size in Mb, the number of lines, the number of characters and the number of words of the file.
+
+```{r summary}
+text_summary <- data.frame(fileNames = names)
+
+summaryOfFiles <- function(file) {
+    row <- NULL
+    size <- round(file.size(file) / 10^6, 3)
+    read <- read_lines(file, skip_empty_rows = T)
+    lines <- length(read)
+    char <- sum(nchar(read))
+    words <- wordcount(read, sep = ' ')
+    row <- c(file, size, lines, char, words)
+    return(row)
+}
+```
+
+Next, I used the `apply()` function on the `text_summary` dataFrame using the `summaryOfFiles` as function to be applied.
+Since the `apply()` function returns a matrix I will merge its transposed with the original Dataframe.
+```{r merge, arning=FALSE}
+summaryPerFile <- apply(text_summary, 1, summaryOfFiles)
+text_summary <- merge(text_summary, t(summaryPerFile), by = 'fileNames')
+```
+
+Then, I do some formatting of the column names, create new columns to denote language and type of text and change characters to vectors in the count columns
+```{r dataFrame}
+colnames(text_summary)[2:5] <- c('fileSizeInMb', 'numberOfLines', 'numberOfCharacters', 'numberOfWords')
+text_summary$language <- rep(c('Deutsch', 'English','Finnish','Russian'), c(3, 3, 3, 3))
+text_summary$fileType <- rep(c('Blogs', 'News', 'Twitter'), 4)
+
+text_summary[, 2] <- as.numeric(text_summary[, 2])
+text_summary[, 3] <- as.numeric(text_summary[, 3])
+text_summary[, 4] <- as.numeric(text_summary[, 4])
+text_summary[, 5] <- as.numeric(text_summary[, 5])
+```
+This is the info collected from each file
+```{r table}
+text_summary %>%
+  kable() %>%
+  kable_styling()
+```
+
+To understand this information better, here I show some barplots for each file
+```{r barplots, fig.align='center'}
+base <- ggplot(text_summary, aes(x = language, fill = fileType)) + theme_minimal() + labs(x = 'Language', fill = 'File Type')
+
+base + geom_bar(stat = 'identity', aes(y = numberOfLines / 10^6), position = position_dodge(), color = 'black') + labs(y = '# of (in Millions)', title = 'Number of Lines per File')
+base + geom_bar(stat = 'identity', aes(y = numberOfWords / 10^6), position = position_dodge(), color = 'black') + labs(y = '# of Words (in Millions)', title = 'Number of Words per File')
+base + geom_bar(stat = 'identity', aes(y = numberOfCharacters / 10^6), position = position_dodge(), color = 'black') + labs(y = '# of Characters (in Millions)', title = 'Number of Characters per File')
+base + geom_bar(stat = 'identity', aes(y = fileSizeInMb), position = position_dodge(), color = 'black') + labs(y = 'File Size (Mb)', title = 'File Size in Mb')
+```
+
+From these plots it is possible to conclude that the distribution is not the same for the four languages and the three file types. In some languages, the news count is greater than blogs or twitter, but for other languages this is not the case. However, one thing is clear: the English files are much larger in every metric than the files in other languages. In all languages, there are more lines in the twitter files but have the least amount of words and characters, meaning shorter sentences, as expected.
+
+# Visual Exploratory Analysis of Words Counts and Distribution in English Files
+
+Finally, in order to see the distribution of words, bigrams and trigrams for the english language files, I will use a special `lapply()` function, in order to iterate efficiently on the three files. Here I explain the step-by-step approach.
+
+1. Use the `parallel` package to do do the job in parallel
+2. Select the number of cores and start the cluster with `makePSOCKcluster()`
+3. Export the libraries and variables to be used inside the `parLapply()` using `clusterEvalQ()` and `clusterExport()`, respectively
+4. Read the file and sample it randomly only 10% of the original file
+5. Create a vector of number of characters in the whole file
+6. Create the tibbles (*data.Frames*) for the count of each word, bigram and trigram. *Note:* the stop words were removed in order to get a better insight; these stop words include 'of', 'the', 'and', and many more. The dataFrame of these words can be accessed from the `tidytext` package
+7. Plot the top 20 entries in each tibble
+8. Return a list that contains a vector of characters, a list of the tibbles and a list of the plots
+9. This process is done in parallel for each file
+10. Stop the cluster
+11. Rename the result to the file names
+
+```{r parallel-lapply, warning=FALSE, message=FALSE, results='hide'}
+ncores <- 3
+cl <- makePSOCKcluster(ncores)
+clusterEvalQ(cl, library(tidyverse))
+clusterEvalQ(cl, library(tidytext))
+clusterExport(cl, "names")
+start <- Sys.time()
+word_dist <- parLapply(cl, seq(names[1:3]), function(i) {
+  data("stop_words")
+  set.seed(123456)
+  pct <- 0.1
+  file <- read_lines(names[i], skip_empty_rows = T)
+  n_characters <- nchar(file)
+
+  text <- tibble(text = file) %>%
+    sample_n(., pct * nrow(.))
+  text_df <- text %>%
+      unnest_tokens(word, text)
+
+  text_count_sw <- text %>%
+      unnest_tokens(word, text) %>%
+      anti_join(stop_words) %>%
+      count(word, sort = TRUE)
+
+  bigram_count_sw <- text %>%
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+    count(bigram, sort = TRUE) %>%
+    separate(bigram, c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word) %>%
+    unite(bigram, word1, word2, sep = " ")
+
+  trigram_count_sw <- text %>%
+    unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+    count(trigram, sort = TRUE) %>%
+    separate(trigram, c("word1", "word2", "word3"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word) %>%
+    filter(!word3 %in% stop_words$word) %>%
+    unite(trigram, word1, word2, word3, sep = " ")
+
+  text_counts <- list(text_count_sw = text_count_sw,bigram_count_sw = bigram_count_sw, trigram_count_sw = trigram_count_sw)
+
+  word_plot_sw <- ggplot(text_count_sw[1:20,], aes(x = n, y = fct_reorder(word, n))) +
+      geom_bar(stat = 'identity', fill = 'red3') + theme_minimal() +
+      labs(x = 'Appearances in Text', y = 'Word', title = 'Top 20 Most Common Words with No Stopwords')
+ 
+  bigram_plot_sw <- ggplot(bigram_count_sw[1:20,], aes(x = n, y = fct_reorder(bigram, n))) +
+    geom_bar(stat = 'identity', fill = 'green3') + theme_minimal() +
+    labs(x = 'Appearances in Text', y = 'Bigram', title = 'Top 20 Bigrams with No Stopwords')
+  
+  trigram_plot_sw <- ggplot(trigram_count_sw[1:20,], aes(x = n, y = fct_reorder(trigram, n))) +
+      geom_bar(stat = 'identity', fill = 'blue3') + theme_minimal() +
+      labs(x = 'Appearances in Text', y = 'trigram', title = 'Top 20 Trigrams with No Stopwords')
+   
+  plots <- list(word_plot_sw = word_plot_sw, bigram_plot_sw = bigram_plot_sw, trigram_plot_sw = trigram_plot_sw)
+  
+  return(list(n_characters = n_characters, text_counts = text_counts, plots = plots))
+})
+end <- Sys.time()
+time <- end - start
+stopCluster(cl)
+
+names(word_dist) <- names[1:3]
+```
+
+After running this long `parLapply()` function, the time it took was `r round(time, 3)` minutes, in a 16-Gb Intel Core-i7 7th Gen Lenovo Laptop.
+
+To see the structure of the result of this process I use `str()`, but the output is too long, so it is not seen in this page. But the important thing to keep in mind is that the result is a list of lists that can be accessed using standard `R`.
+
+For instance, the following code, with the help of the `cowplot` package, displays the barplots for the blogs file.
+
+### Blogs Top 20 Words, Bigrams and Trigrams
+
+```{r blogs, fig.height=12, fig.width=10, fig.align='center', warning=FALSE, message=FALSE}
+plot_grid(word_dist[[1]]$plots$word_plot_sw, word_dist[[1]]$plots$bigram_plot_sw, word_dist[[1]]$plots$trigram_plot_sw, rows = 3)
+```
+Similarly, I can do the same for the news and twitter files.
+
+### News Top 20 Words, Bigrams and Trigrams
+
+```{r news, fig.height=12, fig.width=10, fig.align='center', warning=FALSE, message=FALSE}
+plot_grid(word_dist[[2]]$plots$word_plot_sw, word_dist[[2]]$plots$bigram_plot_sw, word_dist[[2]]$plots$trigram_plot_sw, rows = 3)
+```
+
+### Twitter Top 20 Words, Bigrams and Trigrams
+
+```{r twitter, fig.height=12, fig.width=10, fig.align='center', warning=FALSE, message=FALSE}
+plot_grid(word_dist[[3]]$plots$word_plot_sw, word_dist[[3]]$plots$bigram_plot_sw, word_dist[[3]]$plots$trigram_plot_sw, rows = 3)
+```
+
+### Character Distribution in each File
+
+Finally, I want to show the distribution of the number of characters in each of these three files. For this, I also use the list I created.
+
+```{r histograms, fig.width=10, fig.height=12, warning=FALSE, message=FALSE}
+blogs_dist <- ggplot(data_frame(blogs = word_dist[[1]]$n_characters)) + geom_histogram(aes(blogs), color = 'black', fill = '#F8766D') + theme_minimal() + labs(x = '# of Characters', y = 'Frequency', title = 'Number of Characters in each Line of the Blogs File')
+news_dist <- ggplot(data_frame(news = word_dist[[2]]$n_characters)) + geom_histogram(aes(news), color = 'black', fill = '#00BA38') + theme_minimal() + labs(x = '# of Characters', y = 'Frequency', title = 'Number of Characters in each Line of the News File')
+twitter_dist <- ggplot(data_frame(twitter = word_dist[[3]]$n_characters)) + geom_histogram(aes(twitter), color = 'black', fill = '#619CFF') + theme_minimal() + labs(x = '# of Characters', y = 'Frequency', title = 'Number of Characters in each Line of the Twitter File')
+
+plot_grid(blogs_dist, news_dist, twitter_dist, rows = 3)
+```
+As expected, both blogs and news entries have a greater variance in terms of number of characters, but Twitter length is restricted, therefore the distribution is clearer for the latter and the former two.
+
+# Conclusion
+As seen in the barplots of word, bigrams and trigrams counts, the most common are words like love, time, people, but the combinations of them are very different depending on the source. For instance, in twitter the most common trigrams are related to Holidays like Mother's Day and Cinco de Mayo; in the news the most common trigram is President Barack Obama, while in the blogs it is not clear. 
+Some more work needs to be done in order to assess the word distribution in the complete files and for every language, but this approach can be reproduced with more computational power to achieve this.
+
+## Additional Code
+
+This code below can perform the same task of collecting the word count, bigrams, trigrams and their plots for each of the twelve files. However, given the size of the files and the time it takes to count the words, this may take several hours.
+
+```{r try1, eval=FALSE}
+ncores <- 3
+cl <- makePSOCKcluster(ncores)
+clusterEvalQ(cl, library(tidyverse))
+clusterEvalQ(cl, library(tidytext))
+clusterExport(cl, "names")
+start <- Sys.time()
+word_dist <- parLapply(cl, seq(names[1:12]), function(i) {
+  file <- read_lines(names[i], skip_empty_rows = T)
+  n_characters <- nchar(file)
+  print(paste('Done nchar for', names[i]))
+  text <- tibble(text = file)
+  text_df <- text %>%
+      unnest_tokens(word, text)
+  print(paste('Done text_df for', names[i]))
+  text_count <- text_df %>%
+      count(word, sort = TRUE)
+  print(paste('Done count for', names[i]))
+  text_count_sw <- text %>%
+      unnest_tokens(word, text) %>%
+      anti_join(stop_words) %>%
+      count(word, sort = TRUE)
+  print(paste('Done count_sw for', names[i]))
+
+  bigram_count <- text %>%
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+    count(bigram, sort = TRUE)
+  print(paste('Done bigram for', names[i]))
+
+  bigram_count_sw <- text %>%
+    unnest_tokens(bigram, text, token = "ngrams", n = 2) %>%
+    count(bigram, sort = TRUE) %>%
+    separate(bigram, c("word1", "word2"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word) %>%
+    unite(bigram, word1, word2, sep = " ")
+  print(paste('Done bigram_sw for', names[i]))
+
+  trigram_count <- text %>%
+    unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+    count(trigram, sort = TRUE)
+  print(paste('Done trigram for', names[i]))
+
+  trigram_count_sw <- text %>%
+    unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+    count(trigram, sort = TRUE) %>%
+    separate(trigram, c("word1", "word2", "word3"), sep = " ") %>%
+    filter(!word1 %in% stop_words$word) %>%
+    filter(!word2 %in% stop_words$word) %>%
+    filter(!word3 %in% stop_words$word) %>%
+    unite(trigram, word1, word2, word3, sep = " ")
+  print(paste('Done trigram_sw for', names[i]))
+
+  # text_counts <- list(text_count_sw = text_count_sw,bigram_count_sw = bigram_count_sw, trigram_count_sw = trigram_count_sw)
+
+  text_counts <- list(text_count = text_count, text_count_sw = text_count_sw, bigram_count = bigram_count, bigram_count_sw = bigram_count_sw, trigram_count = trigram_count, trigram_count_sw = trigram_count_sw)
+
+  word_plot <- ggplot(text_count[1:20,], aes(x = n, y = fct_reorder(word, n))) +
+  geom_bar(stat = 'identity', fill = 'darkred') + theme_minimal() +
+  labs(x = 'Appearances in Text', y = 'Word', title = 'Top 20 Most Common Words')
+
+  word_plot_sw <- ggplot(text_count_sw[1:20,], aes(x = n, y = fct_reorder(word, n))) +
+      geom_bar(stat = 'identity', fill = 'red3') + theme_minimal() +
+      labs(x = 'Appearances in Text', y = 'Word', title = 'Top 20 Most Common Words with No Stopwords')
+
+
+  bigram_plot <- ggplot(bigram_count[1:20,], aes(x = n, y = fct_reorder(bigram, n))) +
+    geom_bar(stat = 'identity', fill = 'darkgreen') + theme_minimal() +
+    labs(x = 'Appearances in Text', y = 'Bigram', title = 'Top 20 Bigrams')
+
+  bigram_plot_sw <- ggplot(bigram_count_sw[1:20,], aes(x = n, y = fct_reorder(bigram, n))) +
+    geom_bar(stat = 'identity', fill = 'green3') + theme_minimal() +
+    labs(x = 'Appearances in Text', y = 'Bigram', title = 'Top 20 Bigrams with No Stopwords')
+
+  trigram_plot <- ggplot(trigram_count[1:20,], aes(x = n, y = fct_reorder(trigram, n))) +
+  geom_bar(stat = 'identity', fill = 'darkblue') + theme_minimal() +
+  labs(x = 'Appearances in Text', y = 'trigram', title = 'Top 20 Trigrams')
+
+  trigram_plot_sw <- ggplot(trigram_count_sw[1:20,], aes(x = n, y = fct_reorder(trigram, n))) +
+      geom_bar(stat = 'identity', fill = 'green3') + theme_minimal() +
+      labs(x = 'Appearances in Text', y = 'trigram', title = 'Top 20 Trigrams with No Stopwords')
+
+  plots <- list(word_plot = word_plot, word_plot_sw = word_plot_sw, bigram_plot = bigram_plot, bigram_plot_sw = bigram_plot_sw, trigram_plot = trigram_plot, trigram_plot_sw = trigram_plot_sw)
+  # plots <- list(word_plot, word_plot_sw, bigram_plot, bigram_plot_sw, trigram_plot, trigram_plot_sw)
+  
+  return(list(n_characters = n_characters, text_counts = text_counts, plots = plots))
+})
+end <- Sys.time()
+time <- end - start
+stopCluster(cl)
+
+names(word_dist) <- names[1:12]
+```
