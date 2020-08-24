@@ -1,43 +1,49 @@
----
-title: "Swiftkey Shiny App - Get Data"
-author: "Andres Camilo Zuñiga Gonzalez"
-date: "25/8/2020"
-output: github_document
----
-```{r setup, include=FALSE, eval=FALSE}
-setwd('./Data_Science_Capstone/')
-```
+Swiftkey Shiny App - Get Data
+================
+Andres Camilo Zuñiga Gonzalez
+25/8/2020
 
-This is the explanation of how to get the data from the English documents for the Coursera Data Science Capstone on Word Prediction with SwiftKey Data
+This is the explanation of how to get the data from the English
+documents for the Coursera Data Science Capstone on Word Prediction with
+SwiftKey Data
 
+1.  Load necessary packages
 
-1. Load necessary packages
+<!-- end list -->
 
-```{r packages, warning=FALSE, message=FALSE}
+``` r
 library(tidytext) #text handling
 library(parallel) #parallel processing
 ```
 
+2.  Create the strings for reading the files and load the stop\_words
+    dataset from the `tidytext` package
 
-2. Create the strings for reading the files and load the stop_words dataset from the `tidytext` package
+<!-- end list -->
 
-```{r}
+``` r
 files <- c('en_US/en_US.blogs.txt', 'en_US/en_US.news.txt', 'en_US/en_US.twitter.txt')
 types <- c('blogs', 'news', 'twitter')
 data("stop_words")
 stop_words_c <- stop_words$word
 ```
 
-3. Since datasets are huge, I will process them in parallel using a modified `apply()` function from the `parallel` package
+3.  Since datasets are huge, I will process them in parallel using a
+    modified `apply()` function from the `parallel` package
 
-* Load each package and variable in the clusters with `clusterEvalQ()` and `clusterExport()`, respectively
-* Sample 10% of the text lines randomly.
-* Unnest tokens in n-grams and count each occurrence.
-* Separate n-grams in n columns (e.g., 2-gram in two columns).
-* Stop clusters.
-* Rename the list.
+<!-- end list -->
 
-```{r parallel-lapply, warning=FALSE, message=FALSE, results='hide'}
+  - Load each package and variable in the clusters with `clusterEvalQ()`
+    and `clusterExport()`, respectively
+  - Sample 10% of the text lines randomly.
+  - Unnest tokens in n-grams and count each occurrence.
+  - Separate n-grams in n columns (e.g., 2-gram in two columns).
+  - Stop clusters.
+  - Rename the list.
+
+<!-- end list -->
+
+``` r
 ncores <- 3
 cl <- makePSOCKcluster(ncores)
 clusterEvalQ(cl, library(readr))
@@ -74,12 +80,17 @@ stopCluster(cl)
 
 names(word_grams) <- types
 ```
-4. Save the word column from the stop words dataset as an R object
-5. Save the the list of datasets as an R object
-```{r}
+
+4.  Save the word column from the stop words dataset as an R object
+5.  Save the the list of datasets as an R object
+
+<!-- end list -->
+
+``` r
 saveRDS(stop_words_c, file = 'SwiftkeyShinyApp/data/stop_words.rds')
 saveRDS(object = word_grams, file = 'SwiftkeyShinyApp/data/word_grams.rds')
 ```
 
-6. Visit the Shiny App [here](https://ancazugo.shinyapps.io/SwiftkeyShinyApp/).
-7. See the pitch slides [here](https://rpubs.com/ancazugo/swiftkeyapp).
+6.  Visit the Shiny App
+    [here](https://ancazugo.shinyapps.io/SwiftkeyShinyApp/).
+7.  See the pitch slides [here](https://rpubs.com/ancazugo/swiftkeyapp).
